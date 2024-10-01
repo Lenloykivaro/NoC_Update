@@ -1,48 +1,38 @@
 module vc_module (
-    input wire clk,
-    input wire reset,
-    input wire [31:0] in_data,
-    input wire in_valid,
-    output wire in_ready,
-    output wire [31:0] out_data,
-    output wire out_valid,
-    input wire out_ready,
-    input wire in_head,
-    input wire in_tail,
-    output wire out_head,
-    output wire out_tail
+    input clk,
+    input reset,
+    input in_valid,
+    input [7:0] in_data,
+    input head,           // Head flit signal
+    input tail,           // Tail flit signal
+    output reg [7:0] out_data,
+    output reg valid_out,
+    output reg vc_full
 );
+    reg [7:0] fifo [0:5]; // Buffer for 6 flits
+    integer head_ptr = 0;
+    integer tail_ptr = 0;
 
-reg [31:0] vc_buffer;   // Single buffer for this VC
-reg vc_valid;           // Valid signal for this VC
-reg vc_head;            // Head signal for this VC
-reg vc_tail;            // Tail signal for this VC
-
-assign in_ready = !vc_valid;  // VC is ready when it's not holding a valid flit
-
-// Store incoming flit in VC
-always @(posedge clk or posedge reset) begin
-    if (reset) begin
-        vc_valid <= 1'b0;
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            head_ptr <= 0;
+            tail_ptr <= 0;
+            vc_full <= 0;
+            valid_out <= 0;
+        end else begin
+            if (in_valid && !vc_full) begin
+                fifo[tail_ptr] <= in_data; // Store incoming flit
+                tail_ptr <= (tail_ptr + 1) % 6; // Circular increment
+                if (tail_ptr == head_ptr) vc_full <= 1; // Buffer full condition
+            end
+            
+            // Forward the head flit when available
+            if (head_ptr != tail_ptr) begin
+                out_data <= fifo[head_ptr];
+                valid_out <= 1;
+                head_ptr <= (head_ptr + 1) % 6; // Circular increment
+                if (head_ptr == tail_ptr) vc_full <= 0; // Buffer not full anymore
+            end
+        end
     end
-    else if (in_valid && in_ready) begin
-        vc_buffer <= in_data;
-        vc_head <= in_head;
-        vc_tail <= in_tail;
-        vc_valid <= 1'b1;
-    end
-end
-
-// Transmit flit from VC
-assign out_data = vc_buffer;
-assign out_valid = vc_valid;
-assign out_head = vc_head;
-assign out_tail = vc_tail;
-
-// Clear valid flag after transmission
-always @(posedge clk) begin
-    if (out_valid && out_ready) begin
-        vc_valid <= 1'b0;
-    end
-end
 endmodule

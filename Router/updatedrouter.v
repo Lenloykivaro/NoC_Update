@@ -1,103 +1,58 @@
-module router (
-    input wire clk,
-    input wire reset,
-    input wire [31:0] in_data,
-    input wire in_valid,
-    input wire in_head,
-    input wire in_tail,
-    output wire in_ready,
-    output wire [31:0] out_data,
-    output wire out_valid,
-    input wire out_ready,
-    output wire out_head,
-    output wire out_tail
+module router_module (
+    input clk,
+    input reset,
+    input [7:0] in_data,
+    input in_valid,
+    output [7:0] out_data,
+    output valid_out
 );
+    wire [7:0] vc0_out, vc1_out;
+    wire vc0_valid, vc1_valid;
+    wire selected_vc;
 
-// Internal wires for Virtual Channel 0 and 1
-wire [31:0] vc0_data, vc1_data;
-wire vc0_valid, vc1_valid, vc0_ready, vc1_ready;
-wire vc0_head, vc0_tail, vc1_head, vc1_tail;
-wire [1:0] selected_vc;
+    // Instantiate VC modules
+    vc_module vc0 (
+        .clk(clk),
+        .reset(reset),
+        .in_valid(in_valid),
+        .in_data(in_data),
+        .head(in_data[7:0] == 8'b11111111), // Example condition for head
+        .tail(in_data[7:0] == 8'b00000000), // Example condition for tail
+        .out_data(vc0_out),
+        .valid_out(vc0_valid),
+        .vc_full()
+    );
 
-// Internal signal to control VC selection for input flits
-reg vc_select;
+    vc_module vc1 (
+        .clk(clk),
+        .reset(reset),
+        .in_valid(in_valid),
+        .in_data(in_data),
+        .head(in_data[7:0] == 8'b11111111),
+        .tail(in_data[7:0] == 8'b00000000),
+        .out_data(vc1_out),
+        .valid_out(vc1_valid),
+        .vc_full()
+    );
 
-// Instantiate two VC modules
-vc_module vc0 (
-    .clk(clk),
-    .reset(reset),
-    .in_data(in_data),
-    .in_valid(in_valid && (vc_select == 1'b0)), // Gate in_valid by vc_select
-    .in_ready(vc0_ready),
-    .out_data(vc0_data),
-    .out_valid(vc0_valid),
-    .out_ready(vc0_ready),
-    .in_head(in_head),
-    .in_tail(in_tail),
-    .out_head(vc0_head),
-    .out_tail(vc0_tail)
-);
+    // Instantiate Switch module
+    switch_module switch_inst (
+        .clk(clk),
+        .reset(reset),
+        .vc0_data(vc0_out),
+        .vc1_data(vc1_out),
+        .vc0_valid(vc0_valid),
+        .vc1_valid(vc1_valid),
+        .out_data(out_data),
+        .valid_out(valid_out)
+    );
 
-vc_module vc1 (
-    .clk(clk),
-    .reset(reset),
-    .in_data(in_data),
-    .in_valid(in_valid && (vc_select == 1'b1)), // Gate in_valid by vc_select
-    .in_ready(vc1_ready),
-    .out_data(vc1_data),
-    .out_valid(vc1_valid),
-    .out_ready(vc1_ready),
-    .in_head(in_head),
-    .in_tail(in_tail),
-    .out_head(vc1_head),
-    .out_tail(vc1_tail)
-);
-
-// Controller to select active VC for output flits
-controller_module controller_inst (
-    .clk(clk),
-    .reset(reset),
-    .vc0_valid(vc0_valid),
-    .vc1_valid(vc1_valid),
-    .selected_vc(selected_vc)
-);
-
-// Logic for selecting which VC receives incoming flits
-always @(posedge clk or posedge reset) begin
-    if (reset) begin
-        vc_select <= 1'b0;  // Default to VC0
-    end else if (in_valid && (vc0_ready || vc1_ready)) begin
-        if (vc0_ready) begin
-            vc_select <= 1'b0;  // Select VC0 if it's ready
-        end else if (vc1_ready) begin
-            vc_select <= 1'b1;  // Select VC1 if VC0 isn't ready
-        end
-    end
-end
-
-// Output multiplexer (switch) to forward the data from selected VC
-switch_module switch_inst (
-    .clk(clk),
-    .reset(reset),
-    .vc0_data(vc0_data),
-    .vc0_valid(vc0_valid),
-    .vc1_data(vc1_data),
-    .vc1_valid(vc1_valid),
-    .vc0_ready(vc0_ready),
-    .vc1_ready(vc1_ready),
-    .selected_vc(selected_vc),
-    .out_data(out_data),
-    .out_valid(out_valid),
-    .out_ready(out_ready),
-    .out_head(out_head),
-    .out_tail(out_tail),
-    .vc0_head(vc0_head),
-    .vc0_tail(vc0_tail),
-    .vc1_head(vc1_head),
-    .vc1_tail(vc1_tail)
-);
-
-// Set the in_ready signal to true when either VC is ready to receive flits
-assign in_ready = (vc0_ready && vc_select == 1'b0) || (vc1_ready && vc_select == 1'b1);
-
+    // Instantiate Controller module
+    controller_module controller_inst (
+        .clk(clk),
+        .reset(reset),
+        .vc0_valid(vc0_valid),
+        .vc1_valid(vc1_valid),
+        .selected_vc(selected_vc)
+    );
 endmodule

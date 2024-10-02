@@ -1,0 +1,124 @@
+Your proposed modular design for the router is well-structured and logical for a 2x2 Network-on-Chip (NoC). Here's an analysis of the modules and some recommendations for handling the switch controller and any additional modules you may need:
+
+1. VC (Virtual Channel Module)
+Function: This module will manage the two 8-bit FIFOs that represent the virtual channels (VCs). It handles the storage of incoming flits until they can be forwarded.
+
+Key Tasks:
+Managing two FIFO buffers (one per VC).
+Handling backpressure (e.g., by generating ready signals if the FIFO is full).
+Passing flits to the switch module once the head-of-line (HoL) flit is ready.
+
+
+2. Switch Module
+Function: This module is responsible for forwarding flits from the appropriate input VC to the correct output port based on the routing decisions made by the controller.
+
+Key Tasks:
+Perform flit switching based on routing decisions.
+Handle contention when multiple inputs request the same output.
+Interface with the controller for flow control.
+
+
+3. Controller (VC Allocation and Flow Control)
+Function: This module is central to managing routing decisions, VC allocation, and flow control.
+
+Key Tasks:
+VC Allocation: Decide which virtual channel will store incoming flits, using static allocation in your case.
+
+Routing: Determine the output port for the flits based on the static routing algorithm.
+
+Flow Control: Manage backpressure by sending ready/valid signals to upstream routers and monitoring downstream routers' availability.
+
+
+4. Switch Controller
+You have a few options for this component:
+Include in Main Controller:
+This would centralize control and simplify communication between routing, VC allocation, and switch control logic. The main controller would manage the switch’s operations directly.
+
+Include in Switch Module:
+This would make the switch module more autonomous, with the switch managing flit contention and arbitration based on input from the controller.
+
+Separate Module:
+If the switch has complex arbitration logic or multiple input-output paths, keeping the switch controller as a separate module might make the design more scalable and modular. This could allow better reuse in larger designs.
+
+
+Recommendation:
+If your switch logic is relatively simple (e.g., static routing and minimal contention handling), integrating the switch controller into the main controller or switch itself makes sense to avoid unnecessary complexity.
+If your design could grow in complexity, having a separate switch controller would improve maintainability and scalability.
+
+Here’s a breakdown of how many inputs and outputs each module should have and why, based on your modular NoC design:
+
+### 1. **VC (Virtual Channel Module)**
+- **Inputs:**
+  - `clk` (1 bit): Clock signal for synchronous operation.
+  - `rst` (1 bit): Reset signal to initialize the buffers.
+  - `flit_in` (8 bits): Incoming flit data (flits are 8 bits as per your system).
+  - `valid_in` (1 bit): Indicates whether the incoming flit is valid for processing.
+  
+- **Outputs:**
+  - `vc_out_0` (8 bits): Flit output from Virtual Channel 0.
+  - `vc_out_1` (8 bits): Flit output from Virtual Channel 1.
+  - `vc0_valid` (1 bit): Indicates whether `vc_out_0` has valid data to be transmitted.
+  - `vc1_valid` (1 bit): Indicates whether `vc_out_1` has valid data to be transmitted.
+  - `vc0_full` (1 bit): Indicates whether VC0 buffer is full (flow control for backpressure).
+  - `vc1_full` (1 bit): Indicates whether VC1 buffer is full (flow control for backpressure).
+  - `vc_sel` (1 bit): Determines which virtual channel is active for data forwarding.
+
+#### Why:
+- **Inputs:** The incoming flits and control signals need to be stored and processed in VCs. The clock and reset ensure synchronous operation, while the flit and valid signals provide the data and its validity.
+- **Outputs:** `vc_out` signals carry flits to the next stage (switch). The valid and full signals are necessary for flow control and preventing buffer overflows.
+
+---
+
+### 2. **Switch Module**
+- **Inputs:**
+  - `vc0_in` (8 bits): Data from Virtual Channel 0.
+  - `vc1_in` (8 bits): Data from Virtual Channel 1.
+  - `NI_in` (8 bits): Data from the network interface (NI).
+  - `sel_up` (1 bit): Selection for whether upstream data or NI data is forwarded.
+  - `sel_vc` (1 bit): Selects which virtual channel is active (VC0 or VC1).
+  - `sel_NI` (1 bit): Selects NI input for routing.
+
+- **Outputs:**
+  - `out_down` (8 bits): Flits forwarded downstream.
+  - `out_NI` (8 bits): Flits routed to the network interface.
+
+#### Why:
+- **Inputs:** The switch needs inputs from both virtual channels and the network interface to make routing decisions. The selection signals (`sel_up`, `sel_vc`, and `sel_NI`) control which input is forwarded to the outputs.
+- **Outputs:** `out_down` carries data to the next router, while `out_NI` returns data to the network interface.
+
+---
+
+### 3. **Controller (VC Allocation and Flow Control)**
+- **Inputs:**
+  - `valid_in` (1 bit): Indicates the validity of incoming flits.
+  - `vc0_full` (1 bit): Status of VC0 (whether it’s full or ready to accept data).
+  - `vc1_full` (1 bit): Status of VC1.
+  
+- **Outputs:**
+  - `vc_sel` (1 bit): Selects which virtual channel will receive incoming flits.
+  - `valid_out` (1 bit): Indicates whether the current flit can be transmitted to the switch.
+
+#### Why:
+- **Inputs:** The controller monitors the availability of VCs (using `vc0_full` and `vc1_full`) and the validity of incoming flits.
+- **Outputs:** The controller sets the `vc_sel` signal, determining where incoming flits are routed, and the `valid_out` signal is used for flow control between modules.
+
+---
+
+### 4. **Switch Controller**
+- **Inputs:**
+  - `vc0_valid` (1 bit): Validity of data from VC0.
+  - `vc1_valid` (1 bit): Validity of data from VC1.
+  - `NI_valid` (1 bit): Validity of data from the network interface.
+  
+- **Outputs:**
+  - `sel_up` (1 bit): Controls whether upstream data or NI data is forwarded.
+  - `sel_vc` (1 bit): Controls which VC data is selected for output.
+  - `sel_NI` (1 bit): Controls whether NI input is selected.
+
+#### Why:
+- **Inputs:** The switch controller receives the valid signals from the VCs and the network interface to arbitrate and decide which data gets forwarded.
+- **Outputs:** The selection signals (`sel_up`, `sel_vc`, `sel_NI`) control how the switch module forwards the data to its outputs.
+
+---
+
+This modular structure ensures that each module has a well-defined set of inputs and outputs based on its responsibilities, ensuring clear data flow and control across the system.

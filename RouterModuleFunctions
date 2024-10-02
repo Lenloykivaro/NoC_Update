@@ -1,0 +1,47 @@
+Got it! Using handshaking signals simplifies the design and is a good fit for a simpler router design. With this approach, you'll use ready and valid signals to manage flow control between modules.
+
+Updated Module Breakdown
+Here’s how you can structure the modules for handshaking signals:
+1. VC (Virtual Channel Module)
+Function: Manages two 8-bit FIFOs as VCs.
+
+Key Tasks:
+Stores incoming flits.
+Provides the ready signal to indicate if the FIFO can accept more flits.
+Forwards flits to the switch module when the head-of-line flit is ready.
+
+
+2. Switch Module
+Function: Forwards flits from the input VCs to the correct output port based on routing decisions.
+Key Tasks:
+Performs switching based on routing.
+Manages contention if multiple inputs request the same output.
+Interfaces with the controller for routing decisions and flow control.
+
+
+3. Controller (Routing and Flow Control)
+Function: Handles routing decisions and flow control.
+Key Tasks:
+Routing: Determines the output port for each flit based on static routing.
+Flow Control: Manages ready and valid signals. This includes generating ready signals to inform the upstream router if the switch module or VC can accept more flits.
+
+
+4. Switch Controller
+Function: Manages the switching logic.
+Key Tasks:
+Handles arbitration and switching of flits from multiple VCs to multiple output ports.
+Integration: If the switching logic is simple, you might include this logic in the switch module itself or combine it with the main controller. If more complex, keep it as a separate module.
+Handshaking Signal Flow
+
+
+Input to VC Module:
+Valid Signal: Indicates that a flit is present and ready to be stored.
+Ready Signal: Indicates if the VC module can accept a new flit.
+
+VC Module to Switch:
+Valid Signal: Indicates that the head-of-line flit is ready to be forwarded.
+Ready Signal: Indicates if the switch module can accept the flit.
+
+Switch to Output:
+Valid Signal: Indicates that the flit is available to be sent out.
+Ready Signal: Indicates if the output can accept the flit.
